@@ -52,12 +52,10 @@ def run_alexa():
         talk('I am in a relationship with golden ')
     elif 'joke' in command:
         talk(pyjokes.get_joke())
-    elif 'sex' in command:
-        talk('hilao aur so jao')
     elif ' do you know shivali saha' in command:
         talk('yes , she is my upcoming owner')
     elif 'marry me' in command:
-        talk ('bhakk , mathar chhoath')
+        talk ('sorry, i am not human being i am a machine')
     else:
         talk('Please say the command again.')
 
