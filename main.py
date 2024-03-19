@@ -120,3 +120,53 @@ with pd.ExcelWriter('Split Yearly Summary.xlsx', engine='openpyxl') as writer:
 
 # Save the modified workbook
 writer.save()
+
+
+
+
+
+import pandas as pd
+import openpyxl
+from openpyxl.styles import Side, Border
+
+size = len(aggregated_df_yearly3.columns)
+
+# Create an ExcelWriter object
+with pd.ExcelWriter('Split Yearly Summary.xlsx', engine='openpyxl') as writer:
+    workbook = openpyxl.Workbook()
+    writer.book = workbook
+    writer.sheets = {ws.title: ws for ws in writer.book.worksheets}
+
+    # Ensure the sheet is visible
+    if 'yearly summary' not in writer.sheets:
+        writer.book.create_sheet(title='yearly summary')
+
+    # Write Re_adjusted_contribution_new_yearlyI with heading and blue color
+    k = 0
+    for j in model_list:
+        globals()[f'Re_adjusted_contribution_new_yearly{j}'].to_excel(writer, sheet_name='yearly summary', startrow=1, startcol=k*(size+2), index=True)
+        worksheet = writer.sheets['yearly summary']
+        worksheet.cell(row=1, column=k*(size+2)).value = f'Yearly Aggregation of Model {j}'
+        # Add borders to each cell within the table
+        for row in worksheet.iter_rows():
+            for cell in row:
+                cell.border = Border(top=Side(style='thin', color='000000'),
+                                    bottom=Side(style='thin', color='000000'),
+                                    left=Side(style='thin', color='000000'),
+                                    right=Side(style='thin', color='000000'))
+        k += 1
+
+    # Write aggregated_df_yearly3 with heading and blue color
+    aggregated_df_yearly3.to_excel(writer, sheet_name='yearly summary', startrow=1, startcol=k*(size+2), index=True)
+    worksheet = writer.sheets['yearly summary']
+    worksheet.cell(row=1, column=k*(size+2)).value = 'Yearly Agg of All Models'
+    # Add borders to each cell within the table
+    for row in worksheet.iter_rows():
+        for cell in row:
+            cell.border = Border(top=Side(style='thin', color='000000'),
+                                bottom=Side(style='thin', color='000000'),
+                                left=Side(style='thin', color='000000'),
+                                right=Side(style='thin', color='000000'))
+
+# Save the modified workbook
+writer.save()
