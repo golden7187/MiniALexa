@@ -1,0 +1,1160 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# **TELECOM CUSTOMER CHURN ANALYSIS**
+
+# # importing all necessary library
+
+# In[1]:
+
+
+#Importing all necessary library
+import pandas as pd
+import seaborn as sns
+import numpy as np
+import matplotlib.pyplot as plt
+get_ipython().run_line_magic('matplotlib', 'inline')
+import warnings
+warnings.filterwarnings("ignore")
+
+from imblearn.pipeline import make_pipeline
+from imblearn.over_sampling import SMOTE
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import cross_val_score
+from sklearn.tree import DecisionTreeClassifier
+
+
+# In[ ]:
+
+
+
+
+
+# # 1. Load the data file
+
+# In[2]:
+
+
+#load the dataset
+df = pd.read_csv("telecom_customer_churn.csv")
+#making a copy for further usecase
+df1 = df.copy()
+cf = df.copy()
+
+
+# In[3]:
+
+
+#Top 5 row
+df.head()
+
+
+# # 2. Undesrstanding of data
+
+# In[4]:
+
+
+#concise summary of the data
+df.info()
+
+
+# In[5]:
+
+
+#Statistical measurement of numerical variables
+df.describe().transpose()
+
+
+# # 3.Overall Visulaization of churn customer
+
+# In[6]:
+
+
+df.describe(include = object).transpose()
+
+
+# In[7]:
+
+
+df.columns.values
+
+
+# In[8]:
+
+
+ax = sns.countplot(df, x = 'Customer Status' ,hue = 'Customer Status')
+ax.set_title('Customer status distribution')
+plt.show()
+
+
+# In[9]:
+
+
+df.groupby(['Customer Status']).size()
+
+
+# In[10]:
+
+
+df.groupby(['Customer Status']) ['Total Revenue'].sum()
+
+
+# In[11]:
+
+
+Customer_status = df['Customer Status']
+Customer_counts =  Customer_status.value_counts()
+plt.pie(Customer_counts, labels=Customer_counts.index, autopct="%1.1f%%")
+plt.title('Customer Status')
+plt.show()
+
+
+# In[12]:
+
+
+Customer_status = df['Customer Status']
+Total_Revenue = df['Total Revenue']
+Customer_revenue =  Total_Revenue.sum()
+status_rev = df.groupby('Customer Status')['Total Revenue'].sum()
+plt.pie(status_rev, labels=status_rev.index, autopct="%1.1f%%")
+plt.title('Customer Status Revenue')
+plt.show()
+
+
+# **INSIGHT**
+# 
+# **1. Here we can clearly see that only 6.4% out of total customer are joined and it's bringing only 0.3% of total revenue.**
+# 
+# **2. we can drop the 'joined' customer or merge it with 'stayed' for better visulization and convert it into typical classification problem.**
+# 
+# **3. I am dropping the all joined.**
+
+# In[13]:
+
+
+df = df[df["Customer Status"]!= "Joined"]
+len(df)
+
+
+# In[14]:
+
+
+df.head()
+
+
+# # 4. Identify Causes for Churning
+
+# In[15]:
+
+
+ax = sns.countplot(df, y = 'Churn Category',order = df['Churn Category'].value_counts().index)
+ax.set_title('Churn Category distribution')
+
+
+# In[16]:
+
+
+ax = sns.countplot(df, y = 'Churn Reason',order = df['Churn Reason'].value_counts().index)
+ax.set_title('Churn Reason distribution')
+
+
+# INSIGHT
+# 
+# 1.Most of the customer are churnig due to competitor because they have better device and better offer
+# 
+# 2. Attitude of support person is also a big reason behind churning this company need to improve it
+
+# In[17]:
+
+
+#dropping the uneccessary data for anlysis
+df = df.drop(['Churn Category','Churn Reason','Customer ID', 'City'],axis=1)
+
+
+# # 5.Numerical Analysis
+
+# In[18]:
+
+
+df_num = df.select_dtypes('number')
+df_object = df.select_dtypes('object')
+
+
+# In[19]:
+
+
+cat  = list(df.select_dtypes(include='object').columns)
+num = list(df.select_dtypes(exclude='object').columns)
+
+
+# In[20]:
+
+
+fig, axes = plt.subplots(5,3 , figsize=(16,12))
+plt.subplots_adjust(wspace=0.3, hspace=0.5)
+axes = axes.flatten()
+for i in range(len(num)):
+    sns.histplot(x = df[num[i]], hue = df['Customer Status'], palette = ["red","blue"], bins = 40,ax=axes[i])
+
+
+# **INSIGHT**
+# 
+# **We can notice that 3 features here strongly influence the churn rate**
+# 
+# **Tenure in Months : A customer is more likely to churn in the first 4 months since he joined**
+# 
+# **Total Charges We can notice that the amount of Total charge for churn customers is significantly lower than the Stayed in customers
+# Total Revenue**
+# 
+# **people having zero referral are churning**
+# 
+
+# This plot shows that the features 'Avg Monthly GB Download', 'Total Refunds', 'Number of Dependents', 'Number of Referrals' and 'Total Extra Data Charges' need to be further analysed
+
+# In[21]:
+
+
+#creating a heatmap for correlation 
+sns.heatmap(df[num].corr(), annot = True,fmt='.1f') 
+
+
+# 
+
+# **INSIGHT**
+# 
+# **Based on the correlation maps we can say Total Charges and Total Long Distance Charges being highly correlated with Total Revenue**
+# 
+# **Tenure in month is highly correlated with total charge and total revenue**
+# 
+# **Monthly charge is correlated to age**
+# 
+
+# In[ ]:
+
+
+
+
+
+# # 5.1 Avg Monthly GB Download:
+
+# In[22]:
+
+
+df_num[['Avg Monthly GB Download']].boxplot(figsize=(8,6))
+
+
+# In[23]:
+
+
+#converting age into a range
+bins = [19,30,45,60,80]
+names = ['19-30','30-45','45-60','60-80']
+df_object['AgeRange'] = pd.cut(df['Age'],bins, labels=names,include_lowest=True)
+
+
+# In[24]:
+
+
+plt.figure(figsize=(16,14))
+sns.catplot(data=df_object.join(df_num),x='AgeRange',y='Avg Monthly GB Download', col ='Customer Status',kind='box')
+
+
+# **younger people have by far the highest download flow than the other age groups**
+
+# # 5.2 Total Extra Data Charges, Number of Dependents, Total Refunds and Number of Referrals
+
+# In[25]:
+
+
+df['Total Extra Data Charges'].value_counts()
+
+
+# In[26]:
+
+
+df['Number of Dependents'].value_counts()
+
+
+# In[27]:
+
+
+df['Total Refunds'].value_counts()
+
+
+# In[28]:
+
+
+df['Number of Referrals'].value_counts()
+
+
+# In[29]:
+
+
+pd.concat([df['Total Extra Data Charges'].value_counts(normalize=True).reset_index(),df['Number of Dependents'].value_counts(normalize=True).reset_index(),
+          df['Total Refunds'].value_counts(normalize=True).reset_index(),df['Number of Referrals'].value_counts(normalize=True).reset_index()],axis=1).rename(columns={'index':'value'})
+
+
+# In[30]:
+
+
+#Proportion means propertion of each value relative to total number of occurance in the respective columns.
+#it give us the normalized view of freq of each value within  its respective column.
+#for example 
+# proportion of 10 = freq of 10/total freq
+
+
+# 'Total Refunds', 'Number of Dependents', 'Number of Referrals' and 'Total Extra Data Charges' are mostly populated by zero values
+# 
+
+# In[ ]:
+
+
+
+
+
+# # 6. CATEGORICAL ANALYSIS WITHOUT HANDLING MISSING VALUE
+# 
+# I did it just for analysing how it will change after handling missing value
+
+# In[31]:
+
+
+df_object = df.select_dtypes('object')
+
+
+# In[32]:
+
+
+fig = plt.figure(figsize = (25, 25))
+data_cat=df[cat]
+i=1
+for x in cat[:-1]:
+    plt.subplot(5, 5, i)
+    ax=sns.countplot(data =data_cat , x = data_cat[x], hue ='Customer Status', palette = ["#95BEDD", '#FF5959'])
+    ax.set(xlabel = None, ylabel = None)
+    plt.title(str(x), loc='center')
+    i+=1
+plt.show()
+
+
+# Married people tend to stay loyal to the company
+# 
+# People subscribing the offer "E" are likely to churn
+# 
+# offer A is performing very good
+# 
+# 
+# People not having internet service are more likely to churn compared to people who do not hav it.
+# 
+# t
+# People not having online security, online Backup, Device Protection Plan and Premium Tech Support are more likely to churn than people who havie.
+# 
+# em
+# People not having dependents living with them are more likely to churn compare to people who  **h.ave
+
+# # 6.1 Handling Missing Value
+
+# In[33]:
+
+
+df_object = df.select_dtypes('object')
+
+
+# In[34]:
+
+
+df_object.info()
+
+
+# In[35]:
+
+
+#code to calculte percentage of missing value and plot them
+missing = pd.DataFrame((df.isnull().sum()) * 100 / df.shape[0]).reset_index()
+plt.figure(figsize=(16, 5))
+ax = sns.pointplot(x='index', y=0, data=missing)
+plt.xticks(rotation=90, fontsize=7)
+plt.title("Percentage of Missing values")
+plt.ylabel("PERCENTAGE")
+plt.show()
+
+
+# In[36]:
+
+
+df_object['Internet Service'].value_counts()
+
+
+# In[37]:
+
+
+df_object.join(df_num)[['Internet Type', 'Online Security', 'Online Backup', 'Device Protection Plan', 
+           'Premium Tech Support', 'Streaming TV', 'Streaming Movies','Streaming Music','Unlimited Data','Avg Monthly GB Download']].isna().sum()
+
+
+# The number of Nan values is equal to number of NO values in 'Internet Service' thereby suggesting that Nan are not missing values
+
+# In[38]:
+
+
+df_object[['Internet Type', 'Online Security', 'Online Backup', 'Device Protection Plan', 
+           'Premium Tech Support', 'Streaming TV', 'Streaming Movies','Streaming Music','Unlimited Data']] = df_object[['Internet Type', 'Online Security', 'Online Backup', 'Device Protection Plan', 
+           'Premium Tech Support', 'Streaming TV', 'Streaming Movies','Streaming Music','Unlimited Data']].replace(np.nan,'No Internet')
+df_num['Avg Monthly GB Download'] = df_num['Avg Monthly GB Download'].replace(np.nan,0.0)
+df_object[['Offer']] = df_object[['Offer']].replace(np.nan,'Not Any')
+
+
+# In[39]:
+
+
+df_object.info()
+
+
+# In[40]:
+
+
+df_object['Phone Service'].value_counts()
+
+
+# In[41]:
+
+
+df_object['Multiple Lines'].isna().sum()
+
+
+# In[42]:
+
+
+df_num['Avg Monthly Long Distance Charges'].isna().sum()
+
+
+# In[43]:
+
+
+df_object[df_object['Multiple Lines'].isna()]
+
+
+# Nan values associated to the variable 'Multiple Lines' are due to the fact that the customer is not subscribed to home phone service
+
+# In[44]:
+
+
+df_object['Multiple Lines'] = df_object['Multiple Lines'].replace(np.nan,'NO phone Service')
+df_num['Avg Monthly Long Distance Charges'] = df_num['Avg Monthly Long Distance Charges'].replace(np.nan,'NO phone Service')
+
+
+# # 6.2 DATA WITHOUT ANY MISSING VALUE
+
+# In[45]:
+
+
+df_object.info()
+
+
+# In[46]:
+
+
+#visualization for missing value
+missing = pd.DataFrame((df_object.isnull().sum()) * 100 / df.shape[0]).reset_index()
+plt.figure(figsize=(16, 5))
+ax = sns.pointplot(x='index', y=0, data=missing)
+plt.xticks(rotation=90, fontsize=7)
+plt.title("Percentage of Missing values")
+plt.ylabel("PERCENTAGE")
+plt.show()
+
+
+# # 6.3 categorical analysis after handling missing value
+
+# In[47]:
+
+
+#COUNT OF EACH CATEGORY
+fig, axes = plt.subplots(5,4,figsize=(25,20))
+for i,col in enumerate(df_object.columns):
+    sns.countplot(data=df_object,x=col,ax=axes.flat[i])
+
+
+# In[48]:
+
+
+#Visulization of all category 
+i=0
+fig,axes=plt.subplots(9,2,figsize=(15,60))
+for col in df_object.columns:
+    if col != 'Customer Status':
+        pd.crosstab(df_object[col],df_object['Customer Status']).plot(kind='bar',ax=axes.flat[i])
+        i+=1
+
+
+# According to the plots:
+# 
+# Married people tend to stay loyal to the company
+# 
+# People subscribing the offer "E" are likely to churn
+# 
+# People not having internet service are more likely to churn compared to people who do not have it
+# 
+# People not having online security, online Backup, Device Protection Plan and Premium Tech Support are more likely to churn than people who have them
+# 
+# People not having dependents living with them are more likely to churn compare to people who do have
+
+# In[49]:
+
+
+df_object = pd.get_dummies(df_object).astype(int)
+df_object.head()
+
+
+# In[50]:
+
+
+#heat map for all categorical data after making it in dummy variable
+plt.figure(figsize=(12,12))
+sns.heatmap(df_object.corr(), cmap="Paired")
+
+
+# # 7. Data cleaning for the purpose of modeling
+
+# In[51]:
+
+
+df1.info()
+
+
+# In[52]:
+
+
+#data cleaning as per EDA anlysis and what is required for modeling
+df1[['Internet Type', 'Online Security', 'Online Backup', 'Device Protection Plan', 
+           'Premium Tech Support', 'Streaming TV', 'Streaming Movies','Streaming Music','Unlimited Data']] = df1[['Internet Type', 'Online Security', 'Online Backup', 'Device Protection Plan', 
+           'Premium Tech Support', 'Streaming TV', 'Streaming Movies','Streaming Music','Unlimited Data']].replace(np.nan,'No Internet')
+df1['Avg Monthly GB Download'] = df1['Avg Monthly GB Download'].replace(np.nan,0.0)
+df1['Multiple Lines'] = df1['Multiple Lines'].replace(np.nan,'NO phone Service')
+df1['Offer'] = df1['Offer'].replace(np.nan,'Not any')
+df1['Avg Monthly Long Distance Charges'] = df1['Avg Monthly Long Distance Charges'].replace(np.nan,0.0)
+
+
+# In[53]:
+
+
+#df1 is copy of df which i did earlier in start of coding
+df1.info()
+
+
+# In[54]:
+
+
+#droping joined from dataset
+df1 = df1[df1["Customer Status"]!= "Joined"]
+
+
+# In[55]:
+
+
+#droping all unneccessary coloumn
+df1 = df1.drop(['Churn Category','Churn Reason', 'City','Latitude', 'Longitude','Zip Code'],axis=1)
+
+
+# In[56]:
+
+
+df1.info()
+
+
+# # 7.1 Outlier detection and removing 
+
+# In[57]:
+
+
+##outlier detection using 3- sigma rule
+num = df1.select_dtypes(exclude = 'object').columns
+df1['outlier'] = 'no'
+for name in num:
+    upper_limit = df1[name].mean() + 3*(df1[name].std())
+    lower_limit = df1[name].mean() - 3*(df1[name].std())
+    if (df1[name] < lower_limit).any() or (df1[name] > upper_limit).any():
+        df1.loc[(df1[name] < lower_limit) | (df1[name] > upper_limit), ['outlier']] = [f'{name}_outlier']
+df1
+outlier = df1.loc[df1['outlier'] != 'no']
+outlier
+
+
+# In[58]:
+
+
+ax = sns.countplot(outlier, x='Customer Status')
+ax.bar_label(ax.containers[0])
+ax.set(title = 'contain outlier amounts in each customer status ')
+
+
+# In[59]:
+
+
+# outlier in each category and in each customer status
+outlier.groupby(['outlier','Customer Status'])[['Customer ID']].count().rename(columns= {'Customer ID':'count'})
+
+
+# In[60]:
+
+
+df1 = df1[df1['outlier'] == 'no']
+
+
+# In[61]:
+
+
+df1['Churn'] = np.where(df1['Customer Status'] == 'Stayed',1,0)
+
+
+# In[62]:
+
+
+df1.info()
+
+
+# In[63]:
+
+
+df1 = df1.drop(['outlier','Customer ID','Churn'],axis=1)
+
+
+# In[64]:
+
+
+df1.info()
+
+
+# # 8.Encode categorical data
+
+# In[65]:
+
+
+df1.head()
+
+
+# In[66]:
+
+
+df1['Customer Status']  = df1['Customer Status'].replace({'Stayed':1,'Churned':0})
+
+
+# In[67]:
+
+
+df1.head()
+
+
+# # 9.Creating dummy variable
+
+# In[68]:
+
+
+cf1 = df1.copy()
+
+
+# In[69]:
+
+
+df1 = pd.get_dummies(df1).astype(int)
+
+
+# In[70]:
+
+
+df1.head()
+
+
+# # 9.1 droping one dummy variable to remove dummy trap
+
+# In[71]:
+
+
+cf1 = pd.get_dummies(cf1,drop_first=True).astype(int)
+
+
+# In[72]:
+
+
+cf1.head().astype(int)
+
+
+# In[73]:
+
+
+df1 = cf1
+
+
+# In[74]:
+
+
+#df1 = pd.get_dummies(df1,drop_first=True).astype(int)
+
+
+# In[75]:
+
+
+df1.head()
+
+
+# In[76]:
+
+
+X = df1.drop('Customer Status',axis=1)
+y = df1['Customer Status']
+
+
+# In[77]:
+
+
+df1['Customer Status'].value_counts()
+
+
+# # 10.Handling imbalance data
+
+# In[78]:
+
+
+from imblearn.over_sampling import SMOTE
+
+
+# In[79]:
+
+
+X_res,y_res = SMOTE().fit_resample(X,y)
+
+
+# In[80]:
+
+
+y_res.value_counts()
+
+
+# # 11. Split into test and traning data
+
+# In[81]:
+
+
+from sklearn.model_selection import train_test_split
+
+
+# In[82]:
+
+
+X_train,X_test,y_train,y_test=train_test_split(X_res,y_res,test_size=0.20,random_state=42)
+
+
+# # 12.Standard scaling of data
+
+# In[83]:
+
+
+from sklearn.preprocessing import StandardScaler
+
+
+# In[84]:
+
+
+sc= StandardScaler()
+
+
+# In[85]:
+
+
+X_train=sc.fit_transform(X_train)
+X_test = sc.transform(X_test) 
+
+
+# In[86]:
+
+
+X_train
+
+
+# # 13.using logistic regression
+
+# In[87]:
+
+
+from sklearn.linear_model import LogisticRegression
+
+
+# In[88]:
+
+
+log = LogisticRegression()
+
+
+# In[89]:
+
+
+log.fit(X_train,y_train)
+
+
+# In[90]:
+
+
+y_pred1 = log.predict(X_test)
+
+
+# In[91]:
+
+
+from sklearn.metrics import accuracy_score
+
+
+# In[92]:
+
+
+accuracy_score(y_test,y_pred1)
+
+
+# In[93]:
+
+
+from sklearn.metrics import precision_score,recall_score,f1_score
+
+
+# In[94]:
+
+
+precision_score(y_test,y_pred1)
+
+
+# In[95]:
+
+
+recall_score(y_test,y_pred1)
+
+
+# In[96]:
+
+
+f1_score(y_test,y_pred1)
+
+
+# # 14.using svm classifier
+
+# In[97]:
+
+
+from sklearn import svm 
+
+
+# In[98]:
+
+
+svm = svm.SVC()
+
+
+# In[99]:
+
+
+svm.fit(X_train,y_train)
+
+
+# In[100]:
+
+
+y_pred2 = svm.predict(X_test)
+
+
+# In[101]:
+
+
+accuracy_score(y_test,y_pred2)
+
+
+# In[102]:
+
+
+precision_score(y_test,y_pred2)
+
+
+# In[103]:
+
+
+recall_score(y_test,y_pred2)
+
+
+# # 15. using kNN classifier
+
+# In[104]:
+
+
+from sklearn.neighbors import KNeighborsClassifier
+
+
+# In[105]:
+
+
+knn = KNeighborsClassifier()
+
+
+# In[106]:
+
+
+knn.fit(X_train,y_train)
+
+
+# In[107]:
+
+
+y_pred3 = knn.predict(X_test)
+
+
+# In[108]:
+
+
+accuracy_score(y_test,y_pred3)
+
+
+# In[109]:
+
+
+precision_score(y_test,y_pred3)
+
+
+# In[110]:
+
+
+recall_score(y_test,y_pred3)
+
+
+# # 16.using dicision classifier
+
+# In[111]:
+
+
+from sklearn.tree import DecisionTreeClassifier
+
+
+# In[112]:
+
+
+dt = DecisionTreeClassifier()
+
+
+# In[113]:
+
+
+dt.fit(X_train,y_train)
+
+
+# In[114]:
+
+
+y_pred4 = dt.predict(X_test)
+
+
+# In[115]:
+
+
+accuracy_score(y_test,y_pred4)
+
+
+# In[116]:
+
+
+precision_score(y_test,y_pred4)
+
+
+# In[117]:
+
+
+recall_score(y_test,y_pred4)
+
+
+# # 17.Using random forest classifier
+
+# In[118]:
+
+
+from sklearn.ensemble import RandomForestClassifier
+
+
+# In[119]:
+
+
+rf = RandomForestClassifier()
+
+
+# In[120]:
+
+
+rf.fit(X_train,y_train)
+
+
+# In[121]:
+
+
+y_pred5 = rf.predict(X_test)
+
+
+# In[122]:
+
+
+accuracy_score(y_test,y_pred5)
+
+
+# In[123]:
+
+
+precision_score(y_test,y_pred5)
+
+
+# In[124]:
+
+
+recall_score(y_test,y_pred5)
+
+
+# # 18.using GB Classifier
+
+# In[125]:
+
+
+from sklearn.ensemble import GradientBoostingClassifier
+
+
+# In[126]:
+
+
+gbc = GradientBoostingClassifier()
+
+
+# In[127]:
+
+
+gbc.fit(X_train,y_train)
+
+
+# In[128]:
+
+
+y_pred6 = gbc.predict(X_test)
+     
+
+
+# In[129]:
+
+
+accuracy_score(y_test,y_pred6)
+
+
+# In[130]:
+
+
+precision_score(y_test,y_pred6)
+
+
+# In[131]:
+
+
+recall_score(y_test,y_pred6)
+
+
+# # 19. comparing accuracy of all
+
+# In[132]:
+
+
+final_data=pd.DataFrame({'Models':['LR','SVC','KNN','DT','RF','GBC'],
+                        'ACC':[accuracy_score(y_test,y_pred1),
+                              accuracy_score(y_test,y_pred2),
+                              accuracy_score(y_test,y_pred3),
+                              accuracy_score(y_test,y_pred4),
+                              accuracy_score(y_test,y_pred5),
+                              accuracy_score(y_test,y_pred6)]})
+
+
+# In[133]:
+
+
+final_data
+
+
+# In[134]:
+
+
+import seaborn as sns
+
+
+# In[135]:
+
+
+sns.barplot(data=final_data, x='Models', y='ACC')
+
+
+# # 20. comparing precision value for all
+
+# In[136]:
+
+
+final_data=pd.DataFrame({'Models':['LR','SVC','KNN','DT','RF','GBC'],
+                        'PRE':[precision_score(y_test,y_pred1),
+                              precision_score(y_test,y_pred2),
+                              precision_score(y_test,y_pred3),
+                              precision_score(y_test,y_pred4),
+                              precision_score(y_test,y_pred5),
+                              precision_score(y_test,y_pred6)]})
+
+
+# In[137]:
+
+
+final_data
+
+
+# In[138]:
+
+
+sns.barplot(data=final_data, x='Models', y='PRE')
+
+
+# # 21.ROC graph of GBC
+
+# In[139]:
+
+
+from sklearn.metrics import roc_curve
+from sklearn.metrics import RocCurveDisplay
+def plot_sklearn_roc_curve(y_test, y_pred5):
+    fpr, tpr, _ = roc_curve(y_test, y_pred5)
+    roc_display = RocCurveDisplay(fpr=fpr, tpr=tpr).plot()
+    roc_display.figure_.set_size_inches(2,2)
+    plt.plot([0, 1], [0, 1], color = 'g')
+# Plots the ROC curve using the sklearn methods - Good plot
+plot_sklearn_roc_curve(y_test, y_pred5)
+# Plots the ROC curve using the sklearn methods - Bad plot
+#plot_sklearn_roc_curve(y_test, y_pred)
+
+
+# # 22. save the model
+
+# In[140]:
+
+
+X_res=gbc.fit(X_train,y_train)
+
+
+# In[141]:
+
+
+X.columns
+
+
+# In[142]:
+
+
+model.predict([[]])
+
+
+# In[ ]:
+
+
+
+
+
+
